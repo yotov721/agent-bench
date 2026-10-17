@@ -53,9 +53,44 @@ then runs `check.py` in that folder. Exit code 0 is a pass. Nobody judges the ou
 
 ## Results
 
-Results are not published yet. The first full runs were cut short by OpenRouter's free-tier limit of 50
-requests per day, and I'd rather publish nothing than numbers from a partial run. They will be added here as a table of
-pass rate, average steps, tokens and time per model.
+Three free OpenRouter models, 10 tasks, 2 trials each (20 trials per model), run on 2026-10-16. Trials that hit
+API rate limits were rerun and are not counted, so every number below comes from a trial that got model answers
+throughout. Raw per-trial data is in [`evals/results/`](evals/results/).
+
+| Model | Passed | Avg steps | Avg tokens | Avg seconds |
+|---|---|---|---|---|
+| `nvidia/nemotron-3-super-120b-a12b:free` | **18/20** | 13.2 | 38,010 | 127 |
+| `poolside/laguna-s-2.1:free` | 17/20 | 6.2 | 10,290 | 55 |
+| `cohere/north-mini-code:free` | 15/20 | 15.1 | 40,031 | 51 |
+
+Passes out of 2 trials, per task:
+
+| Task | nemotron | laguna | cohere |
+|---|---|---|---|
+| 01 fix empty list | 2 | 2 | 2 |
+| 02 add `--json` flag | 2 | 2 | 2 |
+| 03 fix rounding | 2 | 2 | 2 |
+| 04 split module | 2 | 2 | 2 |
+| 05 write tests | 2 | 1 | 1 |
+| 06 csv crash | 2 | 2 | 1 |
+| 07 pagination | 2 | 2 | 2 |
+| 08 parse duration | 2 | 2 | 1 |
+| 09 rename function | 2 | 2 | 2 |
+| 10 shared state | 0 | 0 | 0 |
+
+What the numbers show:
+
+- **Accuracy vs cost.** Nemotron was the most accurate but the slowest, at about 2 minutes per trial. Laguna was
+  nearly as accurate with about a quarter of the tokens and under half the steps, which makes it the most
+  efficient. Cohere was fast but used as many tokens as Nemotron and passed the least.
+- **Looping.** The agent stops a task after 40 model calls. Three trials hit that cap: two Cohere failures
+  (tasks 05 and 08) and one Nemotron trial that still passed because its files were correct.
+- **One truncated reply.** Laguna's only failure on task 05 was a response cut off at the token limit (8,000), not a wrong answer.
+- **Task 10 failed in all 6 trials, and the grader may be stricter than the instruction.** Every model replaced the
+  shared defaults with a deep copy, which is the trap the task was built around, but all of them
+  returned nested objects that are still shared with the caller's `overrides` argument. The grader requires those to be
+  independent too, and `task.md` does not say so explicitly. Treat this row as "ambiguous task", not as evidence about the models.
+- **Small samples.** Two trials per task is thin. Differences of one or two passes between models are within noise.
 
 ## Quick start
 
