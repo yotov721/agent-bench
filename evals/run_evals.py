@@ -90,6 +90,31 @@ def run_trial(task: Path, model: str) -> dict:
     return result
 
 
+def check_free_quota(model: str) -> None:
+    """For free OpenRouter models, show today's remaining free requests and refuse to start at zero."""
+    import json as _json
+    import os
+    import urllib.request
+
+    import agent
+
+    if not model.endswith(":free") or "openrouter.ai" not in agent.BASE_URL:
+        return
+    req = urllib.request.Request(
+        f"{agent.BASE_URL}/key", headers={"Authorization": f"Bearer {os.environ.get('OPENROUTER_API_KEY', '')}"}
+    )
+    try:
+        quota = _json.load(urllib.request.urlopen(req, timeout=15))["data"]["free_model_daily_requests"]
+    except Exception as e:  # the check is advisory; never block a run because it failed
+        print(f"(could not check free-request quota: {e})")
+        return
+    print(f"Free requests today: {quota['remaining']} of {quota['limit']} remaining")
+    if quota["remaining"] <= 0:
+        sys.exit("No free requests left today (the limit is per account, shared by all free models). Try again later.")
+    if quota["remaining"] < 25:
+        print("Warning: a single task can use 10+ requests, so this run may stop early. It can be resumed later.")
+
+
 def summarize(results: list[dict]) -> str:
     """Pass rate counts only trials that ran; API errors are reported separately, not as failures."""
     rows = ["| Task | Passed | API errors | Avg steps | Avg tokens | Avg seconds |", "|---|---|---|---|---|---|"]
@@ -124,6 +149,8 @@ def main() -> None:
 
     import agent  # noqa: F401  (loads .env)
     import tracing
+
+    check_free_quota(args.model)
 
     RESULTS_DIR.mkdir(exist_ok=True)
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", args.model).strip("-")
