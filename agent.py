@@ -65,8 +65,13 @@ def run_tool(root: Path, call, auto_approve: bool) -> dict:
     return {"role": "tool", "tool_call_id": call.id, "content": content}
 
 
-def respond(model: str, messages: list, root: Path, auto_approve: bool) -> None:
-    """Run the agent loop for the latest user message, appending to `messages` in place."""
+def respond(model: str, messages: list, root: Path, auto_approve: bool) -> dict:
+    """Run the agent loop for the latest user message, appending to `messages` in place.
+
+    Returns run stats: model calls, tool calls, token counts and why the loop ended
+    ("done", "length" or "max_turns").
+    """
+    stats = {"steps": 0, "tool_calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "ended": "max_turns"}
     for _ in range(MAX_TURNS):
         with tracing.generation(model, messages) as gen:
             response = client.chat.completions.create(
@@ -77,6 +82,11 @@ def respond(model: str, messages: list, root: Path, auto_approve: bool) -> None:
             )
             choice = response.choices[0]
             gen.update(output=choice.message.model_dump(exclude_none=True), usage=response.usage)
+
+        stats["steps"] += 1
+        if response.usage:
+            stats["prompt_tokens"] += response.usage.prompt_tokens
+            stats["completion_tokens"] += response.usage.completion_tokens
 
         msg = choice.message
         entry = {"role": "assistant", "content": msg.content or ""}
@@ -92,14 +102,18 @@ def respond(model: str, messages: list, root: Path, auto_approve: bool) -> None:
 
         if choice.finish_reason == "length":
             print("\n[Response hit the token limit and was cut off.]")
-            return
+            stats["ended"] = "length"
+            return stats
         if not msg.tool_calls:
-            return
+            stats["ended"] = "done"
+            return stats
 
         for call in msg.tool_calls:
+            stats["tool_calls"] += 1
             messages.append(run_tool(root, call, auto_approve))
 
     print(f"\n[Stopped after {MAX_TURNS} model calls.]")
+    return stats
 
 
 def main() -> None:
