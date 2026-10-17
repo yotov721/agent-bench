@@ -7,11 +7,14 @@ import sys
 from pathlib import Path
 
 import openai
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")  # before tracing/client setup, which read env vars
 
 import tracing
 from tools import NEEDS_APPROVAL, TOOLS, ToolError, describe_call, execute
 
-DEFAULT_MODEL = "qwen/qwen3-coder:free"
+DEFAULT_MODEL = "poolside/laguna-s-2.1:free"
 BASE_URL = os.environ.get("LLM_BASE_URL", "https://openrouter.ai/api/v1")
 MAX_TOKENS = 8000
 MAX_TURNS = 40  # safety cap on model calls per user message
