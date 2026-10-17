@@ -120,7 +120,7 @@ curl -s "https://openrouter.ai/api/v1/models?supported_parameters=tools" \
 
 ## Tracing
 
-Set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_HOST` in `.env` and each run appears in Langfuse as
+Uncomment and fill in `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_HOST` in `.env` and each run appears in Langfuse as
 one trace, with every model call (messages, tokens) and tool call (arguments, output, errors) nested inside it.
 Without those variables, tracing is switched off.
 
