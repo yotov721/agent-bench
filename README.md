@@ -128,8 +128,9 @@ What the numbers show:
 
 ## Failure analysis
 
-All 10 failed trials, read from their Langfuse traces. The results files don't store trace ids, so each failure was
-matched to its trace by model, number of model calls and task text.
+All 10 failed trials, read from their Langfuse traces. The results files from this run don't store trace ids, so each
+failure was matched to its trace by model, number of model calls and task text. New runs record a `trace_id` for every
+trial in the results file, so a result can be opened in Langfuse directly.
 
 | Trial | What happened |
 |---|---|
