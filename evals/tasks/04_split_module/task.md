@@ -1,0 +1,1 @@
+`shop.py` mixes pricing and inventory code. Split it: move `price_with_tax` and `bulk_discount` into a new `pricing.py`, and `Inventory` into a new `inventory.py`. Keep `shop.py` working: it must still expose all three names so existing `from shop import ...` code keeps working.

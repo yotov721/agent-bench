@@ -1,0 +1,1 @@
+`load_config()` in `config.py` leaks state between calls: changing the returned settings in one call changes what later calls return. Fix it so every call returns independent settings and the defaults never change.

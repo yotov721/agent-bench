@@ -1,0 +1,1 @@
+`textutils.py` has no tests. Write thorough `unittest` tests for `slugify`, `truncate` and `wrap_words` in a new file `test_textutils.py`, covering normal cases and edge cases. Run them and make sure they pass. Do not change `textutils.py`.

@@ -1,0 +1,1 @@
+`paginate.py` has bugs: `paginate(items, page, per_page)` returns the wrong items and `total_pages` is wrong for some inputs. Pages are numbered from 1. Fix both functions according to their docstrings.
