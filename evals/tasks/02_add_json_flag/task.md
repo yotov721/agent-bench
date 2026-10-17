@@ -1,0 +1,1 @@
+`wordcount.py` prints line, word and character counts for a file. Add a `--json` flag that prints the same counts as a single JSON object with the keys `lines`, `words` and `chars`. Without the flag the output must stay exactly as it is now.
