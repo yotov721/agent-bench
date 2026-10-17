@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT))
 TASKS_DIR = ROOT / "evals" / "tasks"
 RESULTS_DIR = ROOT / "evals" / "results"
 CHECK_TIMEOUT = 60
+RATE_LIMIT_RETRIES = 3
 
 
 def task_dirs(names: list[str] | None) -> list[Path]:
@@ -90,16 +91,20 @@ def run_trial(task: Path, model: str) -> dict:
 
 
 def summarize(results: list[dict]) -> str:
-    rows = ["| Task | Passed | Avg steps | Avg tokens | Avg seconds |", "|---|---|---|---|---|"]
+    """Pass rate counts only trials that ran; API errors are reported separately, not as failures."""
+    rows = ["| Task | Passed | API errors | Avg steps | Avg tokens | Avg seconds |", "|---|---|---|---|---|---|"]
     for name in sorted({r["task"] for r in results}):
         rs = [r for r in results if r["task"] == name]
-        passed = sum(r["passed"] for r in rs)
-        n = len(rs)
-        avg = lambda key: sum(r.get(key, 0) for r in rs) / n
+        ran = [r for r in rs if not r["error"]]
+        n = len(ran) or 1
+        avg = lambda key: sum(r.get(key, 0) for r in ran) / n
         tokens = avg("prompt_tokens") + avg("completion_tokens")
-        rows.append(f"| {name} | {passed}/{n} | {avg('steps'):.1f} | {tokens:,.0f} | {avg('seconds'):.0f} |")
-    total = sum(r["passed"] for r in results)
-    rows.append(f"| **total** | **{total}/{len(results)}** | | | |")
+        rows.append(
+            f"| {name} | {sum(r['passed'] for r in ran)}/{len(ran)} | {len(rs) - len(ran)} "
+            f"| {avg('steps'):.1f} | {tokens:,.0f} | {avg('seconds'):.0f} |"
+        )
+    ran_all = [r for r in results if not r["error"]]
+    rows.append(f"| **total** | **{sum(r['passed'] for r in ran_all)}/{len(ran_all)}** | {len(results) - len(ran_all)} | | | |")
     return "\n".join(rows)
 
 
@@ -123,7 +128,13 @@ def main() -> None:
     results = []
     for task in tasks:
         for trial in range(1, args.trials + 1):
-            r = run_trial(task, args.model)
+            for attempt in range(1, RATE_LIMIT_RETRIES + 2):
+                r = run_trial(task, args.model)
+                if not (r["error"] or "").startswith("RateLimitError") or attempt > RATE_LIMIT_RETRIES:
+                    break
+                wait = 30 * attempt
+                print(f"    rate-limited, retrying in {wait}s ({attempt}/{RATE_LIMIT_RETRIES})", flush=True)
+                time.sleep(wait)
             r["trial"] = trial
             results.append(r)
             mark = "PASS" if r["passed"] else ("ERROR" if r["error"] else "FAIL")
