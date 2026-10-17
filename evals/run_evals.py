@@ -15,7 +15,6 @@ import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,6 +24,7 @@ TASKS_DIR = ROOT / "evals" / "tasks"
 RESULTS_DIR = ROOT / "evals" / "results"
 CHECK_TIMEOUT = 60
 RATE_LIMIT_RETRIES = 3
+DAILY_LIMIT_MARKER = "free-models-per-day"
 
 
 def task_dirs(names: list[str] | None) -> list[Path]:
@@ -125,31 +125,54 @@ def main() -> None:
     import agent  # noqa: F401  (loads .env)
     import tracing
 
+    RESULTS_DIR.mkdir(exist_ok=True)
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", args.model).strip("-")
+    out = RESULTS_DIR / f"{slug}.json"
+
+    def save() -> None:
+        out.write_text(json.dumps({"model": args.model, "trials": args.trials, "results": results}, indent=2))
+
+    # Resume: keep trials that actually ran (pass or fail); redo the ones that hit API errors.
     results = []
+    if out.exists():
+        results = [r for r in json.loads(out.read_text())["results"] if not r["error"]]
+        if results:
+            print(f"Resuming from {out.relative_to(ROOT)}: {len(results)} finished trials kept")
+    done = {(r["task"], r["trial"]) for r in results}
+
+    stopped_early = False
     for task in tasks:
         for trial in range(1, args.trials + 1):
+            if (task.name, trial) in done:
+                continue
             for attempt in range(1, RATE_LIMIT_RETRIES + 2):
                 r = run_trial(task, args.model)
-                if not (r["error"] or "").startswith("RateLimitError") or attempt > RATE_LIMIT_RETRIES:
+                err = r["error"] or ""
+                if DAILY_LIMIT_MARKER in err or not err.startswith("RateLimitError") or attempt > RATE_LIMIT_RETRIES:
                     break
                 wait = 30 * attempt
                 print(f"    rate-limited, retrying in {wait}s ({attempt}/{RATE_LIMIT_RETRIES})", flush=True)
                 time.sleep(wait)
             r["trial"] = trial
-            results.append(r)
             mark = "PASS" if r["passed"] else ("ERROR" if r["error"] else "FAIL")
             print(f"{task.name:28} trial {trial}  {mark:5}  steps={r.get('steps', '-')}  {r['seconds']}s", flush=True)
             if r["error"]:
                 print(f"    {r['error']}")
+            if DAILY_LIMIT_MARKER in (r["error"] or ""):
+                stopped_early = True  # every further request would fail too; don't record this trial
+                break
+            results.append(r)
+            save()  # persist after every trial so a crash or limit never loses finished work
+        if stopped_early:
+            break
     tracing.flush()
+    save()
 
-    RESULTS_DIR.mkdir(exist_ok=True)
-    slug = re.sub(r"[^a-zA-Z0-9]+", "-", args.model).strip("-")
-    out = RESULTS_DIR / f"{slug}-{datetime.now():%Y%m%d-%H%M%S}.json"
-    out.write_text(json.dumps({"model": args.model, "trials": args.trials, "results": results}, indent=2))
     print("\n" + summarize(results))
     print(f"\nSaved {out.relative_to(ROOT)}")
-
+    if stopped_early:
+        print("Stopped: daily free-request limit reached. Re-run the same command later to resume.")
+        sys.exit(2)
 
 if __name__ == "__main__":
     main()
