@@ -28,6 +28,8 @@ def _plain(value: Any) -> Any:
 
 
 class _NoopObservation:
+    trace_id = None
+
     def update(self, **_: Any) -> None:
         pass
 
@@ -35,6 +37,10 @@ class _NoopObservation:
 class _Observation:
     def __init__(self, obs: Any):
         self._obs = obs
+
+    @property
+    def trace_id(self) -> str | None:
+        return getattr(self._obs, "trace_id", None)
 
     def update(self, **fields: Any) -> None:
         usage = fields.pop("usage", None)

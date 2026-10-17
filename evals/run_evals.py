@@ -79,7 +79,8 @@ def run_trial(task: Path, model: str) -> dict:
         started = time.time()
         stats = {}
         try:
-            with tracing.session(), contextlib.redirect_stdout(io.StringIO()):
+            with tracing.session() as session, contextlib.redirect_stdout(io.StringIO()):
+                result["trace_id"] = session.trace_id  # None when tracing is off; links the trial to its Langfuse trace
                 stats = agent.respond(model, [{"role": "user", "content": prompt}], work, auto_approve=True)
         except openai.APIError as e:
             result["error"] = f"{type(e).__name__}: {e}"[:300]
